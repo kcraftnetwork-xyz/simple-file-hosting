@@ -1,0 +1,19 @@
+{
+  "name": "file-hosting",
+  "version": "1.0.0",
+  "description": "文件托管服务器，带限速和访问信息显示功能",
+  "main": "hosting.js",
+  "scripts": {
+    "start": "node hosting.js",
+    "dev": "nodemon hosting.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.2",
+    "express-throttle-bandwidth": "^1.0.1",
+    "cookie-parser": "^1.4.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
