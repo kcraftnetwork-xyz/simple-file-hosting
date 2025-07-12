@@ -13,6 +13,7 @@ const blockedUserAgents = [
     /crawler/i,
     /spider/i
 ];
+const config = require('./config.json');
 
 /**
  * 检查现代浏览器特性
@@ -69,24 +70,18 @@ function isValidBrowser(userAgent) {
 
     // 检查现代浏览器特征
     const modernBrowsers = [
-        // Chrome 和基于 Chromium 的浏览器
         /Chrome\/([0-9]+)/i,
-        // Firefox
         /Firefox\/([0-9]+)/i,
-        // Safari
         /Safari\/([0-9]+)/i,
-        // Edge (Chromium)
         /Edg\/([0-9]+)/i,
-        // Opera
         /OPR\/([0-9]+)/i
     ];
 
     return modernBrowsers.some(pattern => {
         const match = userAgent.match(pattern);
         if (!match) return false;
-        // 检查版本号是否够新
         const version = parseInt(match[1]);
-        return version >= 70; // 设置一个合理的最低版本号
+        return version >= 70;
     });
 }
 
@@ -107,26 +102,36 @@ function validateDownloadRequest(req, res, next) {
         headers: req.headers
     });
 
+    //  优先判断referrer是否属于允许的来源
+    if (
+        config.downloadCheck?.enableReferrer &&
+        referrer &&
+        Array.isArray(config.downloadCheck.allowedRefDomains) &&
+        config.downloadCheck.allowedRefDomains.some(domain => referrer.includes(domain))
+    ) {
+        return next(); // 直接放行
+    }
+
     // 1. 检查 User-Agent
-    if (!isValidBrowser(userAgent)) {
+    if (config.downloadCheck?.enableUserAgent && !isValidBrowser(userAgent)) {
         console.log(`[${new Date().toLocaleString('zh-CN')}] 非法User-Agent:`, userAgent);
-        return res.status(403).send('仅允许现代浏览器下载');
+        return res.status(403).send('仅允许现代浏览器下载 <a href="/">返回首页</a>');
     }
 
     // 2. 检查现代浏览器特性
-    if (!checkModernBrowserFeatures(req)) {
+    if (config.downloadCheck?.enableBrowserFeature && !checkModernBrowserFeatures(req)) {
         console.log(`[${new Date().toLocaleString('zh-CN')}] 缺少现代浏览器特性`);
-        return res.status(403).send('请使用现代浏览器访问');
+        return res.status(403).send('请使用现代浏览器访问 <a href="/">返回首页</a>');
     }
 
     // 3. 检查 Referrer
-    if (!referrer && !req.path.includes('index.html')) {
+    if (config.downloadCheck?.enableReferrer && !referrer && !req.path.includes('index.html')) {
         return res.status(403).send('请通过正常页面访问下载链接 <a href="/">返回首页</a>');
     }
 
     // 4. 检查是否支持 JavaScript (通过cookie验证)
     const hasJsCheck = req.cookies && req.cookies.jsEnabled;
-    if (!hasJsCheck) {
+    if (config.downloadCheck?.enableJsCheck && !hasJsCheck) {
         // 首次访问，发送检查页面
         return res.send(`
             <!DOCTYPE html>
