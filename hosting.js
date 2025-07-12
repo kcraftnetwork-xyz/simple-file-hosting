@@ -99,6 +99,7 @@ app.use(async (req, res, next) => {
 
 // 读取配置文件
 const config = require('./config.json');
+const e = require("express");
 const PORT = process.env.PORT || config.port;
 const HOST = config.host;
 
@@ -241,6 +242,14 @@ app.get("/files/*", async (req, res) => {
           </body>
         </html>
       `);
+      return;
+    } else if (stat.isFile()) {
+      // 文件请求，进行下载检查
+      validateDownloadRequest(req, res, () => {
+        // 交给静态中间件处理文件下载
+        staticMiddleware(req, res, next);
+      });
+      return;
     } else {
       res.status(404).send('File not found');
     }
