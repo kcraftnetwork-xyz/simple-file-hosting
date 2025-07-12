@@ -4,5 +4,15 @@
   "speedLimit": {
     "enable": false,
     "speed": 30
+  },
+  "downloadCheck": {
+    "enableUserAgent": true,
+    "enableBrowserFeature": true,
+    "enableReferrer": true,
+    "enableJsCheck": true,
+    "allowedRefDomains": [
+      "localhost",
+      "www.example.com"
+    ]
   }
 }
