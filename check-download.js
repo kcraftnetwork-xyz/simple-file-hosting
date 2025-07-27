@@ -1,3 +1,4 @@
+const path = require('path');
 const blockedUserAgents = [
     /wget/i,
     /curl/i,
@@ -14,6 +15,25 @@ const blockedUserAgents = [
     /spider/i
 ];
 const config = require('./config.json');
+
+// 判断是否为文件下载请求
+function isFileDownload(req) {
+    // 通过拓展名判断
+    const ext = path.extname(req.path).toLowerCase();
+    // 常见文件类型
+    const fileExts = ['.zip', '.rar', '.7z', '.tar', '.gz', '.exe', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mp3', '.apk', '.iso', '.txt'];
+    if (fileExts.includes(ext)) return true;
+
+    // 通过 accept 头判断
+    const accept = req.headers['accept'] || '';
+    if (accept.includes('application/octet-stream') || accept.includes('attachment')) return true;
+
+    // 通过 content-disposition 判断（部分浏览器会带）
+    const disposition = req.headers['content-disposition'] || '';
+    if (disposition.includes('attachment')) return true;
+
+    return false;
+}
 
 /**
  * 检查现代浏览器特性
@@ -89,10 +109,15 @@ function isValidBrowser(userAgent) {
  * 验证下载请求
  */
 function validateDownloadRequest(req, res, next) {
+    // 只有真正下载文件时才进行检查
+    if (!isFileDownload(req)) {
+        return next();
+    }
+
     const userAgent = req.get('User-Agent');
     const referrer = req.get('Referrer') || req.get('Referer');
     const ip = req.ip || req.connection.remoteAddress;
-    
+
     // 记录请求信息
     console.log(`[${new Date().toLocaleString('zh-CN')}] 下载请求:`, {
         ip,
@@ -102,7 +127,7 @@ function validateDownloadRequest(req, res, next) {
         headers: req.headers
     });
 
-    //  优先判断referrer是否属于允许的来源
+    // 优先判断referrer是否属于允许的来源
     if (
         config.downloadCheck?.enableReferrer &&
         referrer &&
@@ -114,25 +139,30 @@ function validateDownloadRequest(req, res, next) {
 
     // 1. 检查 User-Agent
     if (config.downloadCheck?.enableUserAgent && !isValidBrowser(userAgent)) {
-        console.log(`[${new Date().toLocaleString('zh-CN')}] 非法User-Agent:`, userAgent);
-        return res.status(403).send('仅允许现代浏览器下载 <a href="/">返回首页</a>');
+        const reason = 'User-Agent 非现代浏览器或疑似下载工具';
+        console.log(`[${new Date().toLocaleString('zh-CN')}] 拒绝下载: ${reason}`);
+        return res.status(403).send(`仅允许现代浏览器下载 <a href="/">返回首页</a><br>原因：${reason}`);
     }
 
     // 2. 检查现代浏览器特性
     if (config.downloadCheck?.enableBrowserFeature && !checkModernBrowserFeatures(req)) {
-        console.log(`[${new Date().toLocaleString('zh-CN')}] 缺少现代浏览器特性`);
-        return res.status(403).send('请使用现代浏览器访问 <a href="/">返回首页</a>');
+        const reason = '请求头缺少现代浏览器特性';
+        console.log(`[${new Date().toLocaleString('zh-CN')}] 拒绝下载: ${reason}`);
+        return res.status(403).send(`请使用现代浏览器访问 <a href="/">返回首页</a><br>原因：${reason}`);
     }
 
-    // 3. 检查 Referrer
+    // 3. 检查 Referrer（无referrer且不是index.html页面）
     if (config.downloadCheck?.enableReferrer && !referrer && !req.path.includes('index.html')) {
-        return res.status(403).send('请通过正常页面访问下载链接 <a href="/">返回首页</a>');
+        const reason = '无有效来源页面 Referrer';
+        console.log(`[${new Date().toLocaleString('zh-CN')}] 拒绝下载: ${reason}`);
+        return res.status(403).send(`请通过正常页面访问下载链接 <a href="/">返回首页</a><br>原因：${reason}`);
     }
 
     // 4. 检查是否支持 JavaScript (通过cookie验证)
     const hasJsCheck = req.cookies && req.cookies.jsEnabled;
     if (config.downloadCheck?.enableJsCheck && !hasJsCheck) {
-        // 首次访问，发送检查页面
+        const reason = '未检测到 JavaScript 支持';
+        console.log(`[${new Date().toLocaleString('zh-CN')}] 拒绝下载: ${reason}`);
         return res.send(`
             <!DOCTYPE html>
             <html>
@@ -147,6 +177,7 @@ function validateDownloadRequest(req, res, next) {
                 <body>
                     <noscript>请启用JavaScript以继续访问</noscript>
                     <p>正在验证浏览器...</p>
+                    <p style="color:red;">原因：${reason}</p>
                 </body>
             </html>
         `);
